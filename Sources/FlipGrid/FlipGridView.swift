@@ -11,8 +11,8 @@ public struct FlipGridView: View {
 
     @StateObject private var viewModel: FlipGridViewModel
 
-    public init(viewModel: FlipGridViewModel = .init()) {
-        _viewModel = StateObject(wrappedValue: viewModel)
+    public init(dataSource: FlipGridDataSource) {
+        _viewModel = StateObject(wrappedValue: .init(dataSource: dataSource))
     }
 
     public var body: some View {
@@ -26,14 +26,11 @@ public struct FlipGridView: View {
                             set: { viewModel.letters[i] = $0 }
                         )
                     )
-                    .frame(width: viewModel.itemSize.width, height: viewModel.itemSize.height)
+                    .frame(width: viewModel.flapSize.width, height: viewModel.flapSize.height)
                 }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-//        .overlay(alignment: .center) {
-//            diagnosticView
-//        }
         .readSize($viewModel.canvasSize)
     }
 
@@ -42,10 +39,10 @@ public struct FlipGridView: View {
         let f: (CGFloat) -> String = { String(format: "%.1f", $0) }
         let rows: [(title: String, value: String)] = [
             ("canvasSize", "\(f(viewModel.canvasSize.width)) × \(f(viewModel.canvasSize.height))"),
-            ("itemsCount", "\(Int(viewModel.itemsCount.width)) × \(Int(viewModel.itemsCount.height))"),
+            ("itemsCount", "\(Int(viewModel.flapCount.width)) × \(Int(viewModel.flapCount.height))"),
             ("spacerCount", "\(Int(viewModel.spacerCount.width)) × \(Int(viewModel.spacerCount.height))"),
             ("spacerSize", "\(f(viewModel.spacerSize.width)) × \(f(viewModel.spacerSize.height))"),
-            ("itemSize", "\(f(viewModel.itemSize.width)) × \(f(viewModel.itemSize.height))"),
+            ("itemSize", "\(f(viewModel.flapSize.width)) × \(f(viewModel.flapSize.height))"),
             ("numberOfItems", "\(viewModel.numberOfItems)")
         ]
 
@@ -71,6 +68,7 @@ public struct FlipGridView: View {
 }
 
 #Preview {
-    FlipGridView()
+    FlipGridView(dataSource: FlipGridDataSource())
+        .padding()
 }
 

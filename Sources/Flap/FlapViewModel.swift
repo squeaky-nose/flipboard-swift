@@ -8,7 +8,6 @@
 import SwiftUI
 import Combine
 
-// For managing the flip animation state
 class FlapViewModel: ObservableObject {
 
     private static let empty: [Character] = Array(" ")
