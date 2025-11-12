@@ -30,6 +30,8 @@ public struct FlipboardView: View {
 
             Text(viewModel.displayLetter)
                 .font(.system(size: fontSize, design: .monospaced))
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
                 .fontWeight(.bold)
                 .foregroundColor(.flapText)
                 .padding(10)
@@ -68,14 +70,18 @@ public struct FlipboardView: View {
 
 // Preview
 #Preview {
-    @Previewable @State var letter: Character = "A"
+    @Previewable @State var letter: Character = " "
     VStack {
-        FlipboardView(fontSize: 50, targetLetter: $letter)
+        FlipboardView(fontSize: 60, targetLetter: $letter)
+            .frame(width: 70, height: 90)
         Button("Flip to A") {
             letter = "A"
         }
         Button("Flip to z") {
             letter = "z"
+        }
+        Button("Flip to 🥔") {
+            letter = "🥔"
         }
     }
 }
