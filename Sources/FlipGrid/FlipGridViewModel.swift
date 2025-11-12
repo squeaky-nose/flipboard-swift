@@ -12,9 +12,9 @@ import SwiftUI
 @MainActor
 public class FlipGridViewModel: ObservableObject {
     let dataSource: FlipGridDataSource
-    let minItemSize: CGSize
-    let itemSpacing: CGFloat
+    @Published var itemSpacing: CGFloat = 0
 
+    private var lastKnownCanvasSize: CGSize = .zero
     @Published var canvasSize: CGSize = .zero
     @Published var flapCount: CGSize = .zero
     @Published var spacerCount: CGSize = .zero
@@ -30,12 +30,9 @@ public class FlipGridViewModel: ObservableObject {
 
     private var cancellables = Set<AnyCancellable>()
 
-    public init(dataSource: FlipGridDataSource, minItemSize: CGSize = CGSize(width: 70, height: 90),
-        itemSpacing: CGFloat = 24) {
+    public init(dataSource: FlipGridDataSource) {
         logger.info("Creating FlipGridViewModel")
         self.dataSource = dataSource
-        self.minItemSize = minItemSize
-        self.itemSpacing = itemSpacing
 
         $canvasSize
             .debounce(for: .milliseconds(50), scheduler: RunLoop.main)
@@ -43,6 +40,7 @@ public class FlipGridViewModel: ObservableObject {
             .sink { [weak self] size in
                 guard let self else { return }
 
+                lastKnownCanvasSize = size
                 recalculateGrid(size)
                 setContent(dataSource)
             }
@@ -50,25 +48,28 @@ public class FlipGridViewModel: ObservableObject {
 
         dataSource
             .objectWillChange
-            .debounce(for: .milliseconds(50), scheduler: RunLoop.main)
             .receive(on: RunLoop.main)
             .sink { [weak self] in
                 guard let self else { return }
 
+                recalculateGrid(lastKnownCanvasSize)
                 setContent(dataSource)
             }
             .store(in: &cancellables)
     }
 
     private func recalculateGrid(_ availableSize: CGSize) {
+        let minItemSize = CGSize(width: 14 * dataSource.size,
+                                 height: 18 * dataSource.size)
+        itemSpacing = CGFloat(5 * dataSource.size)
         flapCount = CGSize(width: floor(availableSize.width / (minItemSize.width + itemSpacing)),
-                            height: floor(availableSize.height / (minItemSize.height + itemSpacing)))
+                           height: floor(availableSize.height / (minItemSize.height + itemSpacing)))
         spacerCount = CGSize(width: max(0, flapCount.width - 1),
                              height: max(0, flapCount.height - 1))
-        spacerSize = CGSize(width: spacerCount.width * itemSpacing,
-                            height: spacerCount.height * itemSpacing)
-        flapSize = CGSize(width: (availableSize.width - spacerSize.width)/flapCount.width,
-                          height: (availableSize.height - spacerSize.height)/flapCount.height)
+        spacerSize = CGSize(width: floor(spacerCount.width * itemSpacing),
+                            height: floor(spacerCount.height * itemSpacing))
+        flapSize = CGSize(width: floor((availableSize.width - spacerSize.width)/flapCount.width),
+                          height: floor((availableSize.height - spacerSize.height)/flapCount.height))
         fontSize = flapSize.height/2
         numberOfItems = Int(flapCount.width * flapCount.height)
         columns = [ GridItem(.adaptive(minimum: flapSize.width), spacing: itemSpacing) ]
@@ -120,7 +121,8 @@ public class FlipGridViewModel: ObservableObject {
     public func setContent(_ content: String) {
         let maxCount = max(1, numberOfItems)
         let chars = Array(content.prefix(maxCount))
-        let padded = chars + Array(repeating: Character(" "), count: max(0, maxCount - chars.count))
+        let padded = chars + Array(repeating: Character(" "),
+                                   count: max(0, maxCount - chars.count))
         if letters.count != maxCount {
             letters = Array(padded.prefix(maxCount))
         } else {
@@ -179,4 +181,5 @@ public class FlipGridViewModel: ObservableObject {
             let right = spaces - left
             return String(repeating: " ", count: left) + line + String(repeating: " ", count: right)
         }
-    }}
+    }
+}

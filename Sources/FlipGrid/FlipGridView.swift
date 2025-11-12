@@ -22,15 +22,37 @@ public struct FlipGridView: View {
                     FlipboardView(
                         fontSize: viewModel.fontSize,
                         targetLetter: Binding(
-                            get: { viewModel.letters[i] },
-                            set: { viewModel.letters[i] = $0 }
+                            get: {
+                                if i < viewModel.letters.count {
+                                    viewModel.letters[i]
+                                } else {
+                                    " "
+                                }
+                            },
+                            set: {
+                                if i < viewModel.letters.count {
+                                    viewModel.letters[i] = $0
+                                }
+                            }
                         )
                     )
-                    .frame(width: viewModel.flapSize.width, height: viewModel.flapSize.height)
+                    .frame(width: viewModel.flapSize.width,
+                           height: viewModel.flapSize.height)
+                    // Animate when new views are inserted/removed
+                    .transition(.asymmetric(
+                        insertion: .scale.combined(with: .opacity),
+                        removal: .opacity
+                    ))
+                    // Animate visual updates to the content itself (iOS/tvOS 17+)
+                    .contentTransition(.opacity)
                 }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .animation(
+            .spring(response: 0.35, dampingFraction: 0.85),
+            value: viewModel.letters
+        )
         .readSize($viewModel.canvasSize)
     }
 
@@ -71,4 +93,3 @@ public struct FlipGridView: View {
     FlipGridView(dataSource: FlipGridDataSource())
         .padding()
 }
-

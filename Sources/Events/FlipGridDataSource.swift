@@ -12,9 +12,11 @@ public class FlipGridDataSource: ObservableObject {
     @Published public var horizontalTextAlignment: HorizontalTextAlignment = .left
     @Published public var verticalTextAlignment: VerticalTextAlignment = .top
 
-    @Published public var message: String
+    @Published public var message: String = ""
 
-    public init() {
-        self.message = ""
+    @Published public var size: Int
+
+    public init(initialSize: Int = 5) {
+        self.size = initialSize
     }
 }
