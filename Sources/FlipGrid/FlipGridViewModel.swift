@@ -9,6 +9,31 @@ import Combine
 import CoreGraphics
 import SwiftUI
 
+/// Whether a cell animates as a split-flap tile or prints as static text — needed so scoreboard
+/// column labels (and similar fixed text) don't flip like dynamic content does.
+public enum CellKind: Sendable, Equatable {
+    case flap
+    case label
+}
+
+public struct FlipCell: Identifiable, Equatable {
+    public let id: UUID
+    public var row: Int
+    public var column: Int
+    public var character: Character
+    public var kind: CellKind
+    public var cycle: FlipAlphabet
+
+    public init(row: Int, column: Int, character: Character, kind: CellKind = .flap, cycle: FlipAlphabet = .full, id: UUID = UUID()) {
+        self.id = id
+        self.row = row
+        self.column = column
+        self.character = character
+        self.kind = kind
+        self.cycle = cycle
+    }
+}
+
 @MainActor
 public class FlipGridViewModel: ObservableObject {
     let dataSource: FlipGridDataSource
@@ -24,7 +49,7 @@ public class FlipGridViewModel: ObservableObject {
     @Published var numberOfItems: Int = 0
     @Published var columns: [GridItem] = []
 
-    @Published var letters: [Character] = []
+    @Published var cells: [[FlipCell]] = []
 
     private let logger = AutoLogger.unifiedLogger()
 
@@ -59,20 +84,38 @@ public class FlipGridViewModel: ObservableObject {
     }
 
     private func recalculateGrid(_ availableSize: CGSize) {
-        let minItemSize = CGSize(width: 14 * dataSource.size,
-                                 height: 18 * dataSource.size)
         itemSpacing = CGFloat(5 * dataSource.size)
-        flapCount = CGSize(width: floor(availableSize.width / (minItemSize.width + itemSpacing)),
-                           height: floor(availableSize.height / (minItemSize.height + itemSpacing)))
+
+        switch dataSource.dimensions {
+        case .autoFit:
+            let minItemSize = CGSize(width: 14 * dataSource.size,
+                                     height: 18 * dataSource.size)
+            flapCount = CGSize(width: floor(availableSize.width / (minItemSize.width + itemSpacing)),
+                               height: floor(availableSize.height / (minItemSize.height + itemSpacing)))
+        case let .fixed(rows, columns):
+            // Explicit tile count regardless of canvas size — tiles scale to fill the available
+            // space instead of the count changing. This is what lets AppleTV's remote up/down set
+            // tile count directly, instead of faking it via `size`.
+            flapCount = CGSize(width: max(0, columns), height: max(0, rows))
+        }
+
         spacerCount = CGSize(width: max(0, flapCount.width - 1),
                              height: max(0, flapCount.height - 1))
         spacerSize = CGSize(width: floor(spacerCount.width * itemSpacing),
                             height: floor(spacerCount.height * itemSpacing))
-        flapSize = CGSize(width: floor((availableSize.width - spacerSize.width)/flapCount.width),
-                          height: floor((availableSize.height - spacerSize.height)/flapCount.height))
-        fontSize = flapSize.height/2
+
+        if flapCount.width > 0, flapCount.height > 0 {
+            flapSize = CGSize(width: floor((availableSize.width - spacerSize.width) / flapCount.width),
+                              height: floor((availableSize.height - spacerSize.height) / flapCount.height))
+        } else {
+            // Avoid propagating NaN/Inf sizes into SwiftUI layout when the canvas is too small to
+            // fit even one tile (or a `.fixed` grid is asked for zero rows/columns).
+            flapSize = .zero
+        }
+
+        fontSize = flapSize.height / 2
         numberOfItems = Int(flapCount.width * flapCount.height)
-        columns = [ GridItem(.adaptive(minimum: flapSize.width), spacing: itemSpacing) ]
+        columns = [ GridItem(.adaptive(minimum: max(flapSize.width, 1)), spacing: itemSpacing) ]
     }
 
     @MainActor
@@ -80,106 +123,81 @@ public class FlipGridViewModel: ObservableObject {
         let lineLength = Int(flapCount.width)
         let maxLines = max(1, Int(flapCount.height))
 
-        // 1. break text into logical lines based on width
-        var lines = splitString(dataSource.message,
-                                maxLength: lineLength)
-
-        // 2. ensure we have at most the visible rows
+        var lines = GridLayout.splitIntoLines(dataSource.message, maxLength: lineLength)
         if lines.count > maxLines {
             lines = Array(lines.prefix(maxLines))
         }
+        lines = GridLayout.verticallyAlign(lines, to: maxLines, alignment: dataSource.verticalTextAlignment)
 
-        // 3. vertically align: add empty padded lines based on `verticalAlignment`
-        if lines.count < maxLines {
-            let emptyLine = "" // we'll pad it below per-line
-            let missing = maxLines - lines.count
-
-            switch dataSource.verticalTextAlignment {
-            case .top:
-                // existing behavior: content at top, extra at bottom
-                lines.append(contentsOf: Array(repeating: emptyLine, count: missing))
-
-            case .bottom:
-                // push content down
-                lines = Array(repeating: emptyLine, count: missing) + lines
-
-            case .center:
-                let top = missing / 2
-                let bottom = missing - top
-                lines = Array(repeating: emptyLine, count: top) + lines + Array(repeating: emptyLine, count: bottom)
-            }
-        }
-
-        // 4. horizontally pad every line to exact width (right-aligned like before)
         let content = lines
-            .map { pad($0, to: lineLength, alignment: dataSource.horizontalTextAlignment) }
+            .map { GridLayout.pad($0, to: lineLength, alignment: dataSource.horizontalTextAlignment) }
             .joined(separator: "")
 
         setContent(content)
     }
 
     public func setContent(_ content: String) {
-        let maxCount = max(1, numberOfItems)
+        let rows = Int(flapCount.height)
+        let columnsCount = Int(flapCount.width)
+
+        guard rows > 0, columnsCount > 0 else {
+            cells = []
+            numberOfItems = 0
+            return
+        }
+
+        let maxCount = rows * columnsCount
         let chars = Array(content.prefix(maxCount))
         let padded = chars + Array(repeating: Character(" "),
                                    count: max(0, maxCount - chars.count))
-        if letters.count != maxCount {
-            letters = Array(padded.prefix(maxCount))
-        } else {
-            for i in 0..<maxCount {
-                letters[i] = padded[i]
+
+        let centerRow = (rows - 1) / 2
+        let centerColumn = (columnsCount - 1) / 2
+
+        var newGrid: [[FlipCell]] = []
+        var index = 0
+        for row in 0..<rows {
+            let centeredRow = row - centerRow
+            var rowCells: [FlipCell] = []
+            for column in 0..<columnsCount {
+                let centeredColumn = column - centerColumn
+                let character = index < padded.count ? padded[index] : " "
+                index += 1
+                rowCells.append(FlipCell(row: centeredRow, column: centeredColumn, character: character))
             }
+            newGrid.append(rowCells)
         }
+
+        setCells(newGrid)
     }
 
-    private func splitString(_ input: String, maxLength: Int) -> [String] {
-        var result: [String] = []
-
-        // Normalize newlines to \n and split while preserving intentional blank lines
-        let normalized = input
-            .replacingOccurrences(of: "\r\n", with: "\n")
-            .replacingOccurrences(of: "\r", with: "\n")
-
-        for rawLineSubstring in normalized.split(separator: "\n", omittingEmptySubsequences: false) {
-            let rawLine = String(rawLineSubstring)
-
-            var currentLine = ""
-
-            for word in rawLine.split(separator: " ") {
-                if currentLine.isEmpty {
-                    currentLine = String(word)
-                } else if currentLine.count + word.count + 1 <= maxLength {
-                    currentLine += " \(word)"
+    /// Sets the grid's content directly from an already-laid-out grid of cells (produced by
+    /// `FlipboardPayloadRenderer`/`ClockContentRenderer`/etc.), rather than a single wrapped string —
+    /// needed for content with a mix of flap and label cells (a scoreboard) or a non-full flip
+    /// alphabet (a clock's digits). Existing cell identities are preserved by (row, column) position
+    /// so ticking content (a clock) updates its tiles in place instead of insert/remove-animating
+    /// the whole grid on every refresh.
+    public func setCells(_ grid: [[FlipCell]]) {
+        var merged: [[FlipCell]] = []
+        for (row, rowCells) in grid.enumerated() {
+            var mergedRow: [FlipCell] = []
+            for (column, newCell) in rowCells.enumerated() {
+                if row < cells.count, column < cells[row].count {
+                    var existing = cells[row][column]
+                    existing.row = newCell.row
+                    existing.column = newCell.column
+                    existing.character = newCell.character
+                    existing.kind = newCell.kind
+                    existing.cycle = newCell.cycle
+                    mergedRow.append(existing)
                 } else {
-                    result.append(currentLine)
-                    currentLine = String(word)
+                    mergedRow.append(newCell)
                 }
             }
-
-            if !currentLine.isEmpty {
-                result.append(currentLine)
-            } else if rawLine.isEmpty {
-                // preserve intentional blank lines
-                result.append("")
-            }
+            merged.append(mergedRow)
         }
 
-        return result
-    }
-
-    private func pad(_ line: String, to length: Int, alignment: HorizontalTextAlignment = .left) -> String {
-        guard line.count < length else { return line }
-        let spaces = length - line.count
-
-        switch alignment {
-        case .left:
-            return line + String(repeating: " ", count: spaces)
-        case .right:
-            return String(repeating: " ", count: spaces) + line
-        case .center:
-            let left = spaces / 2
-            let right = spaces - left
-            return String(repeating: " ", count: left) + line + String(repeating: " ", count: right)
-        }
+        cells = merged
+        numberOfItems = merged.reduce(0) { $0 + $1.count }
     }
 }

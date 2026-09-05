@@ -12,7 +12,7 @@ import Foundation
 class AutoLogger {
 
     static func unifiedLogger(category: String = #function) -> os.Logger {
-        os.Logger(subsystem: Bundle.main.bundleIdentifier!,
+        os.Logger(subsystem: Bundle.main.bundleIdentifier ?? "FlipboardSwift",
                   category: category)
     }
 }

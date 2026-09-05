@@ -16,11 +16,12 @@ public struct FlipboardView: View {
     @State private var currentLetter: Character = " "
     @State private var flipTask: Task<Void, Never>? = nil
 
-    @StateObject private var viewModel = FlapViewModel()
+    @StateObject private var viewModel: FlapViewModel
 
-    public init(fontSize: CGFloat, targetLetter: Binding<Character>) {
+    public init(fontSize: CGFloat, targetLetter: Binding<Character>, cycle: FlipAlphabet = .full) {
         self.fontSize = fontSize
         self._targetLetter = targetLetter
+        self._viewModel = StateObject(wrappedValue: FlapViewModel(cycle: cycle))
     }
 
     public var body: some View {

@@ -17,75 +17,52 @@ public struct FlipGridView: View {
 
     public var body: some View {
         LazyVGrid(columns: viewModel.columns, spacing: viewModel.itemSpacing) {
-            if viewModel.numberOfItems > 0 {
-                ForEach(0..<viewModel.letters.count, id: \.self) { i in
-                    FlipboardView(
-                        fontSize: viewModel.fontSize,
-                        targetLetter: Binding(
-                            get: {
-                                if i < viewModel.letters.count {
-                                    viewModel.letters[i]
-                                } else {
-                                    " "
-                                }
-                            },
-                            set: {
-                                if i < viewModel.letters.count {
-                                    viewModel.letters[i] = $0
-                                }
-                            }
-                        )
-                    )
-                    .frame(width: viewModel.flapSize.width,
-                           height: viewModel.flapSize.height)
-                    // Animate when new views are inserted/removed
-                    .transition(.asymmetric(
-                        insertion: .scale.combined(with: .opacity),
-                        removal: .opacity
-                    ))
-                    // Animate visual updates to the content itself (iOS/tvOS 17+)
-                    .contentTransition(.opacity)
+            ForEach(viewModel.cells.indices, id: \.self) { row in
+                ForEach(viewModel.cells[row].indices, id: \.self) { column in
+                    let cell = viewModel.cells[row][column]
+
+                    cellView(row: row, column: column, cell: cell)
+                        .frame(width: viewModel.flapSize.width,
+                               height: viewModel.flapSize.height)
+                        .id(cell.id)
+                        // Animate when new views are inserted/removed
+                        .transition(.asymmetric(
+                            insertion: .scale.combined(with: .opacity),
+                            removal: .opacity
+                        ))
+                        // Animate visual updates to the content itself (iOS/tvOS 17+)
+                        .contentTransition(.opacity)
                 }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .animation(
             .spring(response: 0.35, dampingFraction: 0.85),
-            value: viewModel.letters
+            value: viewModel.cells
         )
         .readSize($viewModel.canvasSize)
     }
 
     @ViewBuilder
-    private var diagnosticView: some View {
-        let f: (CGFloat) -> String = { String(format: "%.1f", $0) }
-        let rows: [(title: String, value: String)] = [
-            ("canvasSize", "\(f(viewModel.canvasSize.width)) × \(f(viewModel.canvasSize.height))"),
-            ("itemsCount", "\(Int(viewModel.flapCount.width)) × \(Int(viewModel.flapCount.height))"),
-            ("spacerCount", "\(Int(viewModel.spacerCount.width)) × \(Int(viewModel.spacerCount.height))"),
-            ("spacerSize", "\(f(viewModel.spacerSize.width)) × \(f(viewModel.spacerSize.height))"),
-            ("itemSize", "\(f(viewModel.flapSize.width)) × \(f(viewModel.flapSize.height))"),
-            ("numberOfItems", "\(viewModel.numberOfItems)")
-        ]
-
-        LazyVGrid(columns: [
-            GridItem(.adaptive(minimum: 300), alignment: .leading)
-        ], spacing: 8) {
-            ForEach(rows, id: \.title) { row in
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(row.title)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text(row.value)
-                        .font(.system(.body, design: .monospaced))
-                        .foregroundStyle(.white)
-                }
-                .padding(10)
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            }
+    private func cellView(row: Int, column: Int, cell: FlipCell) -> some View {
+        switch cell.kind {
+        case .flap:
+            FlipboardView(
+                fontSize: viewModel.fontSize,
+                targetLetter: Binding(
+                    get: { viewModel.cells[row][column].character },
+                    set: { viewModel.cells[row][column].character = $0 }
+                ),
+                cycle: cell.cycle
+            )
+        case .label:
+            Text(String(cell.character))
+                .font(.system(size: viewModel.fontSize, design: .monospaced))
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
+                .fontWeight(.bold)
+                .foregroundColor(.flapText)
         }
-        .frame(width: 700)
-        .background(.ultraThinMaterial)
     }
 }
 
