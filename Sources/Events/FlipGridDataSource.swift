@@ -14,6 +14,12 @@ public class FlipGridDataSource: ObservableObject {
 
     @Published public var message: String = ""
 
+    /// A pre-rendered grid (from `FlipboardPayloadRenderer`/`ClockContentRenderer`/etc.), for content
+    /// that needs more than a single aligned/wrapped string — a mix of flap and label cells, or a
+    /// non-full flip alphabet. When set, this takes priority over `message`; set back to `nil` to
+    /// return to the plain-text path.
+    @Published public var cells: [[FlipCell]]? = nil
+
     @Published public var size: Int
 
     /// `.autoFit` (default) derives tile count from canvas size and `size`, matching the original

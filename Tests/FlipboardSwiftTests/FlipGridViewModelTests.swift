@@ -74,6 +74,24 @@ struct FlipGridViewModelTests {
     }
 
     @Test
+    func dataSourceCellsTakePriorityOverMessage() async {
+        let dataSource = FlipGridDataSource()
+        dataSource.dimensions = .fixed(rows: 1, columns: 1)
+        let viewModel = FlipGridViewModel(dataSource: dataSource)
+
+        viewModel.canvasSize = CGSize(width: 100, height: 100)
+        await waitUntil { viewModel.flapCount == CGSize(width: 1, height: 1) }
+
+        dataSource.message = "should not appear"
+        dataSource.cells = [[FlipCell(row: 0, column: 0, character: "Z", kind: .label)]]
+
+        await waitUntil { viewModel.cells.first?.first?.character == "Z" }
+
+        #expect(viewModel.cells.first?.first?.character == "Z")
+        #expect(viewModel.cells.first?.first?.kind == .label)
+    }
+
+    @Test
     func setCellsPreservesIdentityByPositionAcrossUpdates() {
         let dataSource = FlipGridDataSource()
         let viewModel = FlipGridViewModel(dataSource: dataSource)

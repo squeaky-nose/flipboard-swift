@@ -120,6 +120,11 @@ public class FlipGridViewModel: ObservableObject {
 
     @MainActor
     public func setContent(_ dataSource: FlipGridDataSource) {
+        if let cells = dataSource.cells {
+            setCells(cells)
+            return
+        }
+
         let lineLength = Int(flapCount.width)
         let maxLines = max(1, Int(flapCount.height))
 
