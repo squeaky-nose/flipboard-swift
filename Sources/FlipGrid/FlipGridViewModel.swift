@@ -116,6 +116,20 @@ public class FlipGridViewModel: ObservableObject {
         fontSize = flapSize.height / 2
         numberOfItems = Int(flapCount.width * flapCount.height)
         columns = [ GridItem(.adaptive(minimum: max(flapSize.width, 1)), spacing: itemSpacing) ]
+
+        let rows = Int(flapCount.height)
+        let columnCount = Int(flapCount.width)
+        let newResolvedDimensions = (rows > 0 && columnCount > 0)
+            ? GridResolvedDimensions(rows: rows, columns: columnCount)
+            : nil
+        // Guard against a feedback loop: dataSource.objectWillChange is itself subscribed below to
+        // re-trigger recalculateGrid, so an unconditional write here would recurse forever (Published
+        // fires on every assignment regardless of equality). Only assign — and let it re-trigger —
+        // when the resolved shape actually changed; the second pass then computes the same value,
+        // skips the write, and the cascade stops there.
+        if dataSource.resolvedDimensions != newResolvedDimensions {
+            dataSource.resolvedDimensions = newResolvedDimensions
+        }
     }
 
     @MainActor
