@@ -16,31 +16,54 @@ public struct FlipGridView: View {
     }
 
     public var body: some View {
-        LazyVGrid(columns: viewModel.columns, spacing: viewModel.itemSpacing) {
-            ForEach(viewModel.cells.indices, id: \.self) { row in
-                ForEach(viewModel.cells[row].indices, id: \.self) { column in
-                    let cell = viewModel.cells[row][column]
+        // The canvas size must come from an outer GeometryReader whose own size is determined
+        // solely by *its* parent — never from measuring the grid's own rendered content. LazyVGrid
+        // is designed for use inside a ScrollView: its reported size reflects its total content
+        // extent (all rows), not a clamped viewport, even inside `.frame(maxHeight: .infinity)`.
+        // Measuring via a GeometryReader in the grid's own `.background` (the previous approach)
+        // therefore picks up that inflated content size instead of the true available space —
+        // more rows rendered -> a bigger "canvas" measurement -> recalculateGrid thinks more rows
+        // fit -> even more rows rendered, an unbounded loop with no dependency on Combine at all.
+        // The explicit `.frame(width:height:)` + `.clipped()` below hard-bounds the grid to the
+        // outer measurement regardless, so even a transient shape mismatch can't visually overflow.
+        GeometryReader { geometry in
+            LazyVGrid(columns: viewModel.columns, spacing: viewModel.itemSpacing) {
+                ForEach(viewModel.cells.indices, id: \.self) { row in
+                    ForEach(viewModel.cells[row].indices, id: \.self) { column in
+                        let cell = viewModel.cells[row][column]
 
-                    cellView(row: row, column: column, cell: cell)
-                        .frame(width: viewModel.flapSize.width,
-                               height: viewModel.flapSize.height)
-                        .id(cell.id)
-                        // Animate when new views are inserted/removed
-                        .transition(.asymmetric(
-                            insertion: .scale.combined(with: .opacity),
-                            removal: .opacity
-                        ))
-                        // Animate visual updates to the content itself (iOS/tvOS 17+)
-                        .contentTransition(.opacity)
+                        // Every cell gets a fixed, pre-computed size here rather than sizing
+                        // itself — `flapSize` is derived once, at the top, in
+                        // `FlipGridViewModel.recalculateGrid` from the outer GeometryReader's
+                        // `canvasSize` above. No cell (nor `FlipboardView`/the flap tile it wraps)
+                        // does its own geometry measurement; see the outer GeometryReader comment
+                        // above and `FlipboardView`'s own comment for why letting a child measure
+                        // itself is exactly what caused the original resize feedback-loop bug.
+                        cellView(row: row, column: column, cell: cell)
+                            .frame(width: viewModel.flapSize.width,
+                                   height: viewModel.flapSize.height)
+                            .id(cell.id)
+                            // Animate when new views are inserted/removed
+                            .transition(.asymmetric(
+                                insertion: .scale.combined(with: .opacity),
+                                removal: .opacity
+                            ))
+                            // Animate visual updates to the content itself (iOS/tvOS 17+)
+                            .contentTransition(.opacity)
+                    }
                 }
             }
+            .frame(width: geometry.size.width, height: geometry.size.height, alignment: .center)
+            .clipped()
+            .animation(
+                .spring(response: 0.35, dampingFraction: 0.85),
+                value: viewModel.cells
+            )
+            .onAppear { viewModel.canvasSize = geometry.size }
+            .onChange(of: geometry.size) { _, newSize in
+                viewModel.canvasSize = newSize
+            }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .animation(
-            .spring(response: 0.35, dampingFraction: 0.85),
-            value: viewModel.cells
-        )
-        .readSize($viewModel.canvasSize)
     }
 
     @ViewBuilder

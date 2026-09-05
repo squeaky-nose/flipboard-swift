@@ -3,6 +3,24 @@ import Testing
 
 struct FlapViewModelTests {
     @Test
+    func defaultsToABlankDisplayLetterWhenNoInitialLetterIsGiven() {
+        let viewModel = FlapViewModel(cycle: .full)
+        #expect(viewModel.displayLetter == " ")
+    }
+
+    // Regression test for a bug where every tile went blank on a resize: `FlipboardView` gets a
+    // brand-new `FlapViewModel` whenever its grid's shape changes (see `FlipGridViewModel.
+    // setCells`), even for tiles whose target letter isn't actually changing. `displayLetter` used
+    // to always start at a hardcoded blank space and rely on `onChange(of: targetLetter)` to reach
+    // the real letter — but that only fires on a later *change*, never for the initial value, so
+    // an unchanged tile stayed blank forever. `initialLetter` must seed `displayLetter` directly.
+    @Test
+    func initialLetterSeedsTheDisplayedLetterWithoutNeedingAFlip() {
+        let viewModel = FlapViewModel(cycle: .full, initialLetter: "D")
+        #expect(viewModel.displayLetter == "D")
+    }
+
+    @Test
     func sameCharacterProducesNoRotation() {
         let viewModel = FlapViewModel(cycle: .full)
         #expect(viewModel.rotation(from: "a", to: "a").isEmpty)

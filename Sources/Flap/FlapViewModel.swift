@@ -11,11 +11,19 @@ import Combine
 class FlapViewModel: ObservableObject {
     let cycle: FlipAlphabet
 
-    @Published var displayLetter: String = " "
+    @Published var displayLetter: String
     let animationSpeed: TimeInterval = 0.03
 
-    init(cycle: FlipAlphabet = .full) {
+    /// `initialLetter` seeds `displayLetter` directly, rather than always starting at a blank
+    /// space and waiting for a flip animation to reach the real letter. `FlipboardView` gets a
+    /// brand-new `FlapViewModel` (and a brand-new tile identity) every time its containing grid's
+    /// shape changes, even for tiles whose letter isn't changing at all — so if this always
+    /// defaulted to blank, those tiles would stay visibly blank until their letter later happened
+    /// to change to something else. See `FlipboardView.init` for where this is wired up, and
+    /// `FlipGridViewModel.setCells` for why a shape change replaces every tile's identity.
+    init(cycle: FlipAlphabet = .full, initialLetter: Character = " ") {
         self.cycle = cycle
+        self.displayLetter = String(initialLetter)
     }
 
     func rotation(from fromChar: Character, to toChar: Character) -> [Character] {

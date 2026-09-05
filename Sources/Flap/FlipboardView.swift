@@ -9,11 +9,21 @@ import SwiftUI
 import Combine
 
 // Higher-level view that handles sequential flipping through intermediate letters
+//
+// Deliberately has no GeometryReader (or any other self-measurement) of its own. Its size is
+// entirely dictated by the `.frame(width:height:)` its caller (`FlipGridView`'s `cellView`)
+// applies, which in turn comes from `flapSize` — computed once, at the top, in
+// `FlipGridViewModel.recalculateGrid` from the single outer GeometryReader in `FlipGridView`.
+// A child that measures its own rendered content instead of accepting a size handed down from
+// the top is exactly what caused the original resize bug: each cell's reported size would depend
+// on what it currently displayed, letting a small change in content feed back into a change in
+// canvas measurement, feed back into a change in layout, forever. Keep sizing one-directional —
+// top-level canvas -> `flapSize` -> this view's `.frame()` — never the reverse.
 public struct FlipboardView: View {
     let fontSize: CGFloat
     let cornerRadius: CGFloat = 10
     @Binding var targetLetter: Character
-    @State private var currentLetter: Character = " "
+    @State private var currentLetter: Character
     @State private var flipTask: Task<Void, Never>? = nil
 
     @StateObject private var viewModel: FlapViewModel
@@ -21,7 +31,16 @@ public struct FlipboardView: View {
     public init(fontSize: CGFloat, targetLetter: Binding<Character>, cycle: FlipAlphabet = .full) {
         self.fontSize = fontSize
         self._targetLetter = targetLetter
-        self._viewModel = StateObject(wrappedValue: FlapViewModel(cycle: cycle))
+        // Both `currentLetter` (the rotation baseline) and the view model's displayed letter are
+        // seeded from the letter this view is actually created to show — never a hardcoded blank.
+        // A resize gives every tile a fresh identity (new FlipCell id, see `FlipGridViewModel.
+        // setCells`'s shape-changed branch), so this init path runs again even for tiles whose
+        // target letter isn't changing at all. `onChange(of: targetLetter)` below only fires on a
+        // later *change*, never for the initial value, so a tile seeded at blank here would stay
+        // blank on screen until its letter happened to change to something else — exactly the bug
+        // this seeding fixes. See `FlapViewModel.init` for the other half of this.
+        self._currentLetter = State(initialValue: targetLetter.wrappedValue)
+        self._viewModel = StateObject(wrappedValue: FlapViewModel(cycle: cycle, initialLetter: targetLetter.wrappedValue))
     }
 
     public var body: some View {
@@ -44,9 +63,6 @@ public struct FlipboardView: View {
 
             RoundedRectangle(cornerRadius: cornerRadius)
                 .stroke(Color.flapSeparator)
-        }
-        .onAppear {
-            viewModel.displayLetter = String(currentLetter)
         }
         .onChange(of: targetLetter) { _, newTarget in
             // Cancel any in-flight stepping task to avoid overlapping animations
