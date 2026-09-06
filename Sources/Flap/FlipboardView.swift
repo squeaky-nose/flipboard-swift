@@ -51,10 +51,14 @@ public struct FlipboardView: View {
             Text(viewModel.displayLetter)
                 .font(.system(size: fontSize, design: .monospaced))
                 .lineLimit(1)
-                .minimumScaleFactor(0.5)
+                .minimumScaleFactor(0.4)
                 .fontWeight(.bold)
                 .foregroundColor(.flapText)
-                .padding(10)
+                // Scales with fontSize rather than a flat 10pt: a fixed inset barely registers on
+                // tv's typically-large tiles, but on a small tile (Mac's grid now goes well below
+                // tv's minimum size) it eats a large fraction of the available width, squeezing a
+                // wide glyph like an emoji into much less room than it actually has.
+                .padding(.horizontal, max(2, fontSize * 0.08))
                 .frame(maxWidth: .infinity)
                 .animation(.linear(duration: viewModel.animationSpeed*4), value: viewModel.displayLetter)
 
