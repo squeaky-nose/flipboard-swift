@@ -72,9 +72,27 @@ public struct FlipGridView: View {
         case .flap:
             FlipboardView(
                 fontSize: viewModel.fontSize,
+                // Bounds-checked rather than a direct subscript: this closure captures `row`/
+                // `column` at the moment this specific cell view was created, but `viewModel.cells`
+                // can shrink to a smaller shape (a resize) while this exact view is still alive —
+                // e.g. mid-way through its `.transition(removal: .opacity)` fade-out below — and
+                // SwiftUI can still re-invoke a soon-to-be-removed view's binding during that
+                // window. A direct `viewModel.cells[row][column]` then indexes past the end of the
+                // new, smaller array and crashes; falling back to a blank character is harmless
+                // since this view is on its way out either way.
                 targetLetter: Binding(
-                    get: { viewModel.cells[row][column].character },
-                    set: { viewModel.cells[row][column].character = $0 }
+                    get: {
+                        guard viewModel.cells.indices.contains(row),
+                              viewModel.cells[row].indices.contains(column)
+                        else { return " " }
+                        return viewModel.cells[row][column].character
+                    },
+                    set: { newValue in
+                        guard viewModel.cells.indices.contains(row),
+                              viewModel.cells[row].indices.contains(column)
+                        else { return }
+                        viewModel.cells[row][column].character = newValue
+                    }
                 ),
                 cycle: cell.cycle
             )
