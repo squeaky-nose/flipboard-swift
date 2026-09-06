@@ -68,6 +68,12 @@ public struct FlipboardView: View {
             RoundedRectangle(cornerRadius: cornerRadius)
                 .stroke(Color.flapSeparator)
         }
+        // Shared across every flap tile instance deliberately — not unique per tile. UI tests
+        // count tiles via `matching(identifier:)`, which returns every match; a per-tile grid
+        // position isn't needed for that, and cell identity already changes on resize anyway (see
+        // FlipGridViewModel's shape-changed branch), so a stable per-position identifier isn't
+        // meaningful to hand out here.
+        .accessibilityIdentifier("flapTile")
         .onChange(of: targetLetter) { _, newTarget in
             // Cancel any in-flight stepping task to avoid overlapping animations
             flipTask?.cancel()
