@@ -19,11 +19,7 @@ let package = Package(
         ),
     ],
     dependencies: [
-        // Local path for active development alongside flipboard-swift-protocol, mirroring the same
-        // dev-time arrangement used in flipboard-apple. flipboard-swift is published independently
-        // and consumed remotely elsewhere, so this must switch to a versioned remote reference
-        // before flipboard-swift itself is tagged/released again.
-        .package(path: "../flipboard-swift-protocol"),
+        .package(url: "https://github.com/squeaky-nose/flipboard-swift-protocol", from: "2.0.0"),
     ],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.
